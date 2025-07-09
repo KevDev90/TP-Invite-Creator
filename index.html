@@ -133,9 +133,14 @@
         const HARDCODED_REPLY_TO_EMAIL = "kej@trustpilot.com";
         const HARDCODED_LOCATION_ID = "ABC123";
 
-        // --- Trustpilot API Endpoints ---
-        const AUTH_URL = 'https://api.trustpilot.com/v1/oauth/oauth-token';
-        const BASE_INVITE_API_URL = `https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
+        // --- CORS Proxy URL (for testing ONLY, NOT for production) ---
+        // This proxy will forward requests and add CORS headers.
+        // Be aware of the security implications of sending your API keys through a third-party proxy.
+        const CORS_PROXY_URL = 'https://corsproxy.io/?';
+
+        // --- Trustpilot API Endpoints (now routed through the proxy) ---
+        const AUTH_URL = `${CORS_PROXY_URL}https://api.trustpilot.com/v1/oauth/oauth-token`;
+        const BASE_INVITE_API_URL = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
 
         // --- Global Variables for Token Caching ---
         let accessToken = null;
@@ -264,7 +269,7 @@
 
                 if (formData.inviteType === 'email') {
                     // Trustpilot's email invitation endpoint
-                    apiEndpoint = `${BASE_INVITE_API_URL}/email-invitations`;
+                    apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/email-invitations`;
 
                     // Add hardcoded email-specific fields to the root of the request body
                     requestBody.replyTo = HARDCODED_REPLY_TO_EMAIL;
@@ -303,10 +308,10 @@
                 } else if (formData.inviteType === 'link') {
                     // Trustpilot's link generation endpoints
                     if (formData.reviewType === 'service' || formData.reviewType === 'combined') {
-                        apiEndpoint = `${BASE_INVITE_API_URL}/service-review-invitation-links`;
+                        apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/service-review-invitation-links`;
                         displayMessage('Note: For "Combined" review type with "Link" delivery, a Service Review link will be generated.', 'info');
                     } else if (formData.reviewType === 'product') {
-                        apiEndpoint = `${BASE_INVITE_API_URL}/product-review-invitation-links`;
+                        apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/product-review-invitation-links`;
                         requestBody.products = [{
                             sku: formData.productSku,
                             name: formData.productName,
