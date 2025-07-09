@@ -6,12 +6,12 @@
     <title>Trustpilot Demo Invite Creator (Frontend Only)</title>
     <style>
         /* Basic styling for readability */
-        body { font-family: 'Inter', sans-serif; max-width: 600px; margin: 20px auto; padding: 0 20px; background-color: #f4f7f6; color: #333; }
-        h1 { color: #007bff; text-align: center; margin-bottom: 30px; }
+        body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; max-width: 600px; margin: 20px auto; padding: 0 20px; background-color: #f4f7f6; color: #333; }
+        h1 { color: #00b67a; text-align: center; margin-bottom: 30px; }
         form { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
         label { display: block; margin-bottom: 8px; font-weight: bold; color: #555; }
         input[type="text"], input[type="email"], select {
-            width: calc(100% - 20px); /* Account for padding */
+            width: 100%;
             padding: 10px;
             margin-bottom: 15px;
             border: 1px solid #ddd;
@@ -20,7 +20,7 @@
             box-sizing: border-box;
         }
         button {
-            background-color: #007bff;
+            background-color: #00b67a;
             color: white;
             padding: 12px 25px;
             border: none;
@@ -32,10 +32,10 @@
             transition: background-color 0.3s ease;
         }
         button:hover:not(:disabled) {
-            background-color: #0056b3;
+            background-color: #009c68;
         }
         button:disabled {
-            background-color: #a0c8ff;
+            background-color: #a0d3c3;
             cursor: not-allowed;
         }
         .message {
@@ -44,22 +44,11 @@
             border-radius: 6px;
             font-weight: bold;
             text-align: center;
+            word-wrap: break-word;
         }
-        .success {
-            background-color: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        .error {
-            background-color: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        .info {
-            background-color: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
+        .success { background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .error { background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .info { background-color: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
         #productDetails {
             border: 1px dashed #c0c0c0;
             padding: 20px;
@@ -68,22 +57,18 @@
             background-color: #fdfdfd;
             border-radius: 5px;
         }
-        #productDetails h3 {
-            margin-top: 0;
-            color: #007bff;
-            font-size: 1.1em;
-            margin-bottom: 15px;
-        }
+        #productDetails h3 { margin-top: 0; color: #00b67a; font-size: 1.1em; margin-bottom: 15px; }
+        .code-block { background-color: #eef; color: #333; padding: 10px; border-radius: 4px; text-align: left; font-family: monospace; white-space: pre-wrap; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>Trustpilot Demo Invite Creator</h1>
+    <h1>Trustpilot Invite & Link Generator</h1>
 
     <form id="inviteForm">
         <label for="inviteType">1. Invite Delivery Method:</label>
         <select id="inviteType" name="inviteType">
-            <option value="email">Email Invite (Trustpilot sends)</option>
-            <option value="link">Link Invite (You get a link to send)</option>
+            <option value="email">📧 Email Invite (Trustpilot sends)</option>
+            <option value="link">🔗 Link Invite (You get a link to send)</option>
         </select>
 
         <label for="reviewType">2. Review Type:</label>
@@ -95,12 +80,14 @@
 
         <hr style="border-top: 1px dashed #eee; margin: 25px 0;">
 
-        <h3>Customer Email (Other details hardcoded)</h3>
+        <h3>Customer Details</h3>
+        <label for="customerName">Customer Name:</label>
+        <input type="text" id="customerName" name="customerName" placeholder="e.g., Jane Doe" required>
+
         <label for="customerEmail">Customer Email:</label>
         <input type="email" id="customerEmail" name="customerEmail" placeholder="e.g., jane.doe@example.com" required>
 
         <div id="productDetails" style="display:none;">
-            <hr style="border-top: 1px dashed #eee; margin: 25px 0;">
             <h3>Product Details (for Product/Combined Reviews)</h3>
             <label for="productName">Product Name:</label>
             <input type="text" id="productName" name="productName" placeholder="e.g., Super Widget">
@@ -118,259 +105,216 @@
     <div id="responseMessage" class="message" style="display:none;"></div>
 
     <script>
-        // --- Trustpilot API Credentials ---
-        // These are the specific keys you provided.
+        // --- Trustpilot API Credentials & Details ---
+        // ⚠️ IMPORTANT: Never expose API secrets in a public-facing frontend application.
+        // This is for internal testing only, as requested.
         const TRUSTPILOT_API_KEY = '21d70xXTlTmU7UZpFFbnzkwbOwNJrIZs';
         const TRUSTPILOT_API_SECRET = 'MTYsJwX5iZtMGZ8V';
-        const TRUSTPILOT_BUSINESS_USER_ID = '617821b7ae0267001fb006d8'; // For x-business-user-id header
-        const TRUSTPILOT_BUSINESS_UNIT_ID = '556727b40000ff00057fbace'; // Updated as per your request
+        const TRUSTPILOT_BUSINESS_UNIT_ID = '556727b40000ff00057fbace';
 
-        // --- Hardcoded Values ---
-        const HARDCODED_CUSTOMER_NAME = "Kevin";
-        const HARDCODED_LOCALE = "en-US";
-        const HARDCODED_SENDER_NAME = "John Doe";
-        const HARDCODED_SENDER_EMAIL = "someemail2@trustpilot.com";
-        const HARDCODED_REPLY_TO_EMAIL = "kej@trustpilot.com";
-        const HARDCODED_LOCATION_ID = "ABC123";
+        // --- Hardcoded Email Values (only for email invites) ---
+        const SENDER_NAME = "John Doe";
+        const SENDER_EMAIL = "someemail2@trustpilot.com";
+        const REPLY_TO_EMAIL = "kej@trustpilot.com";
 
-        // --- CORS Proxy URL (for testing ONLY, NOT for production) ---
-        // This proxy will forward requests and add CORS headers.
-        // Be aware of the security implications of sending your API keys through a third-party proxy.
-        const CORS_PROXY_URL = 'https://corsproxy.io/?';
-
-        // --- Trustpilot API Endpoints (now routed through the proxy) ---
-        const AUTH_URL = `${CORS_PROXY_URL}https://api.trustpilot.com/v1/oauth/oauth-token`;
-        const BASE_INVITE_API_URL = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
+        // --- Trustpilot API Endpoints ---
+        const AUTH_URL = 'https://api.trustpilot.com/v1/oauth/oauth-token';
+        const BASE_INVITE_API_URL = `https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
 
         // --- Global Variables for Token Caching ---
         let accessToken = null;
-        let tokenExpiry = 0; // Timestamp when token expires in milliseconds
+        let tokenExpiry = 0;
 
-        // --- Fixed Template IDs (from your example payload) ---
-        const SERVICE_REVIEW_TEMPLATE_ID = '59b5216816d43907c47445e2';
-        const PRODUCT_REVIEW_TEMPLATE_ID = '507f191e810c19729de860ea';
+        // --- Template IDs ---
+        const SERVICE_REVIEW_TEMPLATE_ID = '59b5216816d43907c47445e2'; // Replace with your actual service template ID
+        const PRODUCT_REVIEW_TEMPLATE_ID = '507f191e810c19729de860ea'; // Replace with your actual product template ID
 
         // --- DOM Elements ---
+        const inviteForm = document.getElementById('inviteForm');
         const inviteTypeSelect = document.getElementById('inviteType');
         const reviewTypeSelect = document.getElementById('reviewType');
         const productDetailsDiv = document.getElementById('productDetails');
-        const inviteForm = document.getElementById('inviteForm');
         const responseMessageDiv = document.getElementById('responseMessage');
         const submitButton = document.getElementById('submitButton');
 
         // --- Helper Functions ---
 
         function toggleProductDetails() {
-            if (reviewTypeSelect.value === 'product' || reviewTypeSelect.value === 'combined') {
-                productDetailsDiv.style.display = 'block';
-                // Make product fields conditionally required
-                document.getElementById('productName').required = true;
-                document.getElementById('productSku').required = true;
-            } else {
-                productDetailsDiv.style.display = 'none';
-                // Remove required attribute if not needed
-                document.getElementById('productName').required = false;
-                document.getElementById('productSku').required = false;
-            }
+            const needsProductInfo = reviewTypeSelect.value === 'product' || reviewTypeSelect.value === 'combined';
+            productDetailsDiv.style.display = needsProductInfo ? 'block' : 'none';
+            document.getElementById('productName').required = needsProductInfo;
+            document.getElementById('productSku').required = needsProductInfo;
         }
 
         function displayMessage(message, type) {
             responseMessageDiv.style.display = 'block';
-            responseMessageDiv.classList.remove('success', 'error', 'info'); // Remove all previous types
-            responseMessageDiv.classList.add(type);
+            responseMessageDiv.className = `message ${type}`; // Simplified class assignment
             responseMessageDiv.innerHTML = message;
         }
 
         async function getAccessToken() {
-            // Check if token is still valid (with a 1-minute buffer)
             if (accessToken && Date.now() < tokenExpiry) {
                 console.log('Using cached Trustpilot access token.');
                 return accessToken;
             }
 
             console.log('Fetching new Trustpilot access token...');
-            // Base64 encode the API Key and Secret for Basic Authentication
             const credentials = btoa(`${TRUSTPILOT_API_KEY}:${TRUSTPILOT_API_SECRET}`);
-
             try {
                 const response = await fetch(AUTH_URL, {
                     method: 'POST',
                     headers: {
+                        'Authorization': `Basic ${credentials}`,
                         'Content-Type': 'application/x-www-form-urlencoded',
-                        'Authorization': `Basic ${credentials}`
                     },
-                    body: 'grant_type=client_credentials' // Standard OAuth 2.0 client credentials flow
+                    body: 'grant_type=client_credentials'
                 });
-
                 if (!response.ok) {
                     const errorText = await response.text();
-                    throw new Error(`Failed to get access token: ${response.status} - ${errorText}`);
+                    throw new Error(`Token fetch failed: ${response.status} - ${errorText}`);
                 }
-
                 const data = await response.json();
                 accessToken = data.access_token;
-                // Store expiry time: current time + expires_in seconds - 60 seconds buffer
-                tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000;
+                tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // 60-second buffer
                 console.log('Successfully obtained new Trustpilot access token.');
                 return accessToken;
             } catch (error) {
                 console.error('Error in getAccessToken:', error);
-                throw error; // Propagate the error
+                throw error;
             }
         }
 
-        // --- Event Listeners ---
-
-        reviewTypeSelect.addEventListener('change', toggleProductDetails);
-        document.addEventListener('DOMContentLoaded', () => {
-            toggleProductDetails(); // Set initial state for product details
-        });
+        // --- Main Form Submission Logic ---
 
         inviteForm.addEventListener('submit', async (event) => {
-            event.preventDefault(); // Prevent default form submission
-
+            event.preventDefault();
             displayMessage('Processing invite...', 'info');
-            submitButton.disabled = true; // Disable button to prevent double submission
+            submitButton.disabled = true;
 
             const formData = {
                 inviteType: inviteTypeSelect.value,
                 reviewType: reviewTypeSelect.value,
+                customerName: document.getElementById('customerName').value,
                 customerEmail: document.getElementById('customerEmail').value,
-                // Generate a new UUID for each invite
                 referenceId: crypto.randomUUID(),
             };
-
-            // Collect product details if the review type requires them
-            if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
+            
+            // Add product data if necessary
+            if (document.getElementById('productName').required) {
                 formData.productName = document.getElementById('productName').value;
                 formData.productSku = document.getElementById('productSku').value;
                 formData.productUrl = document.getElementById('productUrl').value;
-
-                // Client-side validation for required product fields
-                if (!formData.productName || !formData.productSku) {
-                    displayMessage('Product Name and Product SKU are required for Product or Combined reviews.', 'error');
-                    submitButton.disabled = false;
-                    return;
-                }
             }
 
             try {
-                const token = await getAccessToken(); // Ensure we have a valid access token
-
-                let apiEndpoint;
-                let requestBody = {
-                    referenceId: formData.referenceId, // Use the generated UUID
-                    name: HARDCODED_CUSTOMER_NAME, // Hardcoded
-                    email: formData.customerEmail,
-                    locale: HARDCODED_LOCALE, // Hardcoded
-                    // Common tags for all invites
-                    tags: ['demo-invite', 'generated-by-form'],
+                const token = await getAccessToken();
+                let apiEndpoint = '';
+                let requestBody = {};
+                let headers = {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
                 };
 
+                // ---- BUILD REQUEST BASED ON INVITE TYPE ----
+
                 if (formData.inviteType === 'email') {
-                    // Trustpilot's email invitation endpoint
-                    apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/email-invitations`;
-
-                    // Add hardcoded email-specific fields to the root of the request body
-                    requestBody.replyTo = HARDCODED_REPLY_TO_EMAIL;
-                    requestBody.senderName = HARDCODED_SENDER_NAME;
-                    requestBody.senderEmail = HARDCODED_SENDER_EMAIL;
-                    requestBody.type = "email"; // As per your example payload
-                    requestBody.locationId = HARDCODED_LOCATION_ID; // Hardcoded
-
-                    // Conditionally add serviceReviewInvitation and productReviewInvitation objects
-                    const currentUTCTime = new Date().toISOString().slice(0, 19); // YYYY-MM-DDTHH:MM:SS
+                    // 1. EMAIL INVITE LOGIC
+                    apiEndpoint = `${BASE_INVITE_API_URL}/email-invitations`;
+                    requestBody = {
+                        referenceId: formData.referenceId,
+                        name: formData.customerName,
+                        email: formData.customerEmail,
+                        locale: 'en-US',
+                        senderEmail: SENDER_EMAIL,
+                        senderName: SENDER_NAME,
+                        replyTo: REPLY_TO_EMAIL,
+                    };
+                    
+                    const preferredSendTime = new Date().toISOString();
 
                     if (formData.reviewType === 'service' || formData.reviewType === 'combined') {
                         requestBody.serviceReviewInvitation = {
                             templateId: SERVICE_REVIEW_TEMPLATE_ID,
-                            preferredSendTime: currentUTCTime, // Use current UTC time
-                            redirectUri: "https://trustpilot.com", // Fixed as per example
-                            tags: ["tag1", "tag2"] // Fixed as per example
+                             preferredSendTime: preferredSendTime
                         };
                     }
-
                     if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
                         requestBody.productReviewInvitation = {
                             templateId: PRODUCT_REVIEW_TEMPLATE_ID,
-                            preferredSendTime: currentUTCTime, // Use current UTC time
-                            redirectUri: "https://trustpilot.com", // Fixed as per example
-                            products: [
-                                {
-                                    sku: formData.productSku,
-                                    name: formData.productName,
-                                    productUrl: formData.productUrl || `http://www.mycompanystore.com/products/${formData.productSku}`
-                                }
-                            ]
+                             preferredSendTime: preferredSendTime,
+                            products: [{
+                                name: formData.productName,
+                                sku: formData.productSku,
+                                productUrl: formData.productUrl || undefined // Don't include if empty
+                            }]
                         };
                     }
 
-                } else if (formData.inviteType === 'link') {
-                    // Trustpilot's link generation endpoints
-                    if (formData.reviewType === 'service' || formData.reviewType === 'combined') {
-                        apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/service-review-invitation-links`;
-                        displayMessage('Note: For "Combined" review type with "Link" delivery, a Service Review link will be generated.', 'info');
-                    } else if (formData.reviewType === 'product') {
-                        apiEndpoint = `${CORS_PROXY_URL}https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/product-review-invitation-links`;
-                        requestBody.products = [{
-                            sku: formData.productSku,
-                            name: formData.productName,
-                            productUrl: formData.productUrl || `http://www.mycompanystore.com/products/${formData.productSku}`
-                        }];
-                    } else {
-                        throw new Error('Invalid review type selected for link invite.');
-                    }
                 } else {
-                    throw new Error('Invalid invite delivery method selected.');
+                    // 2. LINK INVITE LOGIC
+                    apiEndpoint = `${BASE_INVITE_API_URL}/invitation-links`;
+                    requestBody = {
+                        referenceId: formData.referenceId,
+                        name: formData.customerName,
+                        email: formData.customerEmail,
+                        locale: 'en-US',
+                        // The 'type' parameter is key for generating links
+                        type: formData.reviewType === 'combined' ? 'service-and-product' : formData.reviewType,
+                    };
+
+                    if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
+                        requestBody.products = [{
+                            name: formData.productName,
+                            sku: formData.productSku,
+                            productUrl: formData.productUrl || undefined
+                        }];
+                    }
                 }
 
-                // Prepare headers, including the x-business-user-id for email invites
-                const headers = {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`
-                };
-                if (formData.inviteType === 'email') {
-                    headers['x-business-user-id'] = TRUSTPILOT_BUSINESS_USER_ID;
-                }
+                // ---- MAKE THE API CALL ----
 
-                // Make the actual Trustpilot API call for the invitation
-                const apiResponse = await fetch(apiEndpoint, {
+                console.log("Sending to:", apiEndpoint);
+                console.log("Request Body:", JSON.stringify(requestBody, null, 2));
+
+                const response = await fetch(apiEndpoint, {
                     method: 'POST',
                     headers: headers,
-                    body: JSON.stringify(requestBody)
+                    body: JSON.stringify(requestBody),
                 });
 
-                if (!apiResponse.ok) {
-                    const errorData = await apiResponse.json();
-                    console.error('Trustpilot API error response:', errorData);
-                    displayMessage(`API Error: ${errorData.message || 'Unknown API error.'} (Status: ${apiResponse.status})`, 'error');
-                    return;
+                const responseData = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status} - ${JSON.stringify(responseData)}`);
                 }
 
-                const responseData = await apiResponse.json();
+                // ---- HANDLE THE RESPONSE ----
 
                 if (formData.inviteType === 'email') {
-                    displayMessage(`Success! Trustpilot email invite for "${HARDCODED_CUSTOMER_NAME}" (Ref: ${formData.referenceId}) has been queued.`, 'success');
-                } else if (formData.inviteType === 'link') {
-                    const inviteLink = responseData.links && responseData.links.length > 0 ? responseData.links[0].href : 'Link not found in API response.';
-                    let linkHtml = `Success! Trustpilot invite link generated for "${HARDCODED_CUSTOMER_NAME}" (Ref: ${formData.referenceId}).`;
-                    if (inviteLink) {
-                        linkHtml += `<br><strong>Link:</strong> <a href="${inviteLink}" target="_blank">${inviteLink}</a>`;
+                    displayMessage(`✅ Success! Email invitation has been scheduled for ${formData.customerEmail}.`, 'success');
+                } else {
+                    let linkHtml = "✅ Success! Here are your invitation links:<br><br>";
+                    if(responseData.serviceReviewInvitationLink) {
+                        linkHtml += `<strong>Service Link:</strong><div class="code-block"><a href="${responseData.serviceReviewInvitationLink}" target="_blank">${responseData.serviceReviewInvitationLink}</a></div><br>`;
+                    }
+                    if(responseData.productReviewInvitationLinks && responseData.productReviewInvitationLinks.length > 0) {
+                        linkHtml += `<strong>Product Link:</strong><div class="code-block"><a href="${responseData.productReviewInvitationLinks[0].url}" target="_blank">${responseData.productReviewInvitationLinks[0].url}</a></div>`;
                     }
                     displayMessage(linkHtml, 'success');
                 }
 
-                // Optional: Clear form after successful submission
-                // inviteForm.reset();
-                // toggleProductDetails(); // Reset product details visibility
-
             } catch (error) {
-                console.error('Error during invite creation:', error);
-                displayMessage(`An unexpected error occurred: ${error.message}. Please check console for details.`, 'error');
+                console.error('Form submission error:', error);
+                displayMessage(`❌ Error: ${error.message}`, 'error');
             } finally {
-                submitButton.disabled = false; // Re-enable the button
+                submitButton.disabled = false;
             }
         });
+
+        // --- Initial Setup ---
+        document.addEventListener('DOMContentLoaded', toggleProductDetails);
+        reviewTypeSelect.addEventListener('change', toggleProductDetails);
+
     </script>
 </body>
 </html>
