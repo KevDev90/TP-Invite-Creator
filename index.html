@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trustpilot Demo Invite Creator (Frontend Only)</title>
+    <title>Trustpilot Demo Invite Creator</title>
     <style>
-        /* Basic styling for readability */
         body { font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif; max-width: 600px; margin: 20px auto; padding: 0 20px; background-color: #f4f7f6; color: #333; }
         h1 { color: #00b67a; text-align: center; margin-bottom: 30px; }
         form { background-color: #fff; padding: 30px; border-radius: 8px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -104,217 +103,96 @@
 
     <div id="responseMessage" class="message" style="display:none;"></div>
 
-    <script>
-        // --- Trustpilot API Credentials & Details ---
-        // ⚠️ IMPORTANT: Never expose API secrets in a public-facing frontend application.
-        // This is for internal testing only, as requested.
-        const TRUSTPILOT_API_KEY = '21d70xXTlTmU7UZpFFbnzkwbOwNJrIZs';
-        const TRUSTPILOT_API_SECRET = 'MTYsJwX5iZtMGZ8V';
-        const TRUSTPILOT_BUSINESS_UNIT_ID = '556727b40000ff00057fbace';
+<script>
+    // --- DOM Elements ---
+    const inviteForm = document.getElementById('inviteForm');
+    const inviteTypeSelect = document.getElementById('inviteType');
+    const reviewTypeSelect = document.getElementById('reviewType');
+    const productDetailsDiv = document.getElementById('productDetails');
+    const responseMessageDiv = document.getElementById('responseMessage');
+    const submitButton = document.getElementById('submitButton');
 
-        // --- Hardcoded Email Values (only for email invites) ---
-        const SENDER_NAME = "John Doe";
-        const SENDER_EMAIL = "someemail2@trustpilot.com";
-        const REPLY_TO_EMAIL = "kej@trustpilot.com";
+    // --- Backend API URL ---
+    const BACKEND_URL = 'http://localhost:3001/api/create-invite';
 
-        // --- Trustpilot API Endpoints ---
-        const AUTH_URL = 'https://api.trustpilot.com/v1/oauth/oauth-token';
-        const BASE_INVITE_API_URL = `https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
+    // --- Helper Functions ---
+    function toggleProductDetails() {
+        const needsProductInfo = reviewTypeSelect.value === 'product' || reviewTypeSelect.value === 'combined';
+        productDetailsDiv.style.display = needsProductInfo ? 'block' : 'none';
+        document.getElementById('productName').required = needsProductInfo;
+        document.getElementById('productSku').required = needsProductInfo;
+    }
 
-        // --- Global Variables for Token Caching ---
-        let accessToken = null;
-        let tokenExpiry = 0;
+    function displayMessage(message, type) {
+        responseMessageDiv.style.display = 'block';
+        responseMessageDiv.className = `message ${type}`;
+        responseMessageDiv.innerHTML = message;
+    }
 
-        // --- Template IDs ---
-        const SERVICE_REVIEW_TEMPLATE_ID = '59b5216816d43907c47445e2'; // Replace with your actual service template ID
-        const PRODUCT_REVIEW_TEMPLATE_ID = '507f191e810c19729de860ea'; // Replace with your actual product template ID
+    // --- Form Submission Logic ---
+    inviteForm.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        displayMessage('Processing invite...', 'info');
+        submitButton.disabled = true;
 
-        // --- DOM Elements ---
-        const inviteForm = document.getElementById('inviteForm');
-        const inviteTypeSelect = document.getElementById('inviteType');
-        const reviewTypeSelect = document.getElementById('reviewType');
-        const productDetailsDiv = document.getElementById('productDetails');
-        const responseMessageDiv = document.getElementById('responseMessage');
-        const submitButton = document.getElementById('submitButton');
+        // 1. Collect all form data into a simple object
+        const formData = {
+            inviteType: inviteTypeSelect.value,
+            reviewType: reviewTypeSelect.value,
+            customerName: document.getElementById('customerName').value,
+            customerEmail: document.getElementById('customerEmail').value,
+            referenceId: crypto.randomUUID(),
+        };
 
-        // --- Helper Functions ---
-
-        function toggleProductDetails() {
-            const needsProductInfo = reviewTypeSelect.value === 'product' || reviewTypeSelect.value === 'combined';
-            productDetailsDiv.style.display = needsProductInfo ? 'block' : 'none';
-            document.getElementById('productName').required = needsProductInfo;
-            document.getElementById('productSku').required = needsProductInfo;
+        if (document.getElementById('productName').required) {
+            formData.productName = document.getElementById('productName').value;
+            formData.productSku = document.getElementById('productSku').value;
+            formData.productUrl = document.getElementById('productUrl').value;
         }
 
-        function displayMessage(message, type) {
-            responseMessageDiv.style.display = 'block';
-            responseMessageDiv.className = `message ${type}`; // Simplified class assignment
-            responseMessageDiv.innerHTML = message;
-        }
-
-        async function getAccessToken() {
-            if (accessToken && Date.now() < tokenExpiry) {
-                console.log('Using cached Trustpilot access token.');
-                return accessToken;
-            }
-
-            console.log('Fetching new Trustpilot access token...');
-            const credentials = btoa(`${TRUSTPILOT_API_KEY}:${TRUSTPILOT_API_SECRET}`);
-            try {
-                const response = await fetch(AUTH_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Basic ${credentials}`,
-                        'Content-Type': 'application/x-www-form-urlencoded',
-                    },
-                    body: 'grant_type=client_credentials'
-                });
-                if (!response.ok) {
-                    const errorText = await response.text();
-                    throw new Error(`Token fetch failed: ${response.status} - ${errorText}`);
-                }
-                const data = await response.json();
-                accessToken = data.access_token;
-                tokenExpiry = Date.now() + (data.expires_in * 1000) - 60000; // 60-second buffer
-                console.log('Successfully obtained new Trustpilot access token.');
-                return accessToken;
-            } catch (error) {
-                console.error('Error in getAccessToken:', error);
-                throw error;
-            }
-        }
-
-        // --- Main Form Submission Logic ---
-
-        inviteForm.addEventListener('submit', async (event) => {
-            event.preventDefault();
-            displayMessage('Processing invite...', 'info');
-            submitButton.disabled = true;
-
-            const formData = {
-                inviteType: inviteTypeSelect.value,
-                reviewType: reviewTypeSelect.value,
-                customerName: document.getElementById('customerName').value,
-                customerEmail: document.getElementById('customerEmail').value,
-                referenceId: crypto.randomUUID(),
-            };
-            
-            // Add product data if necessary
-            if (document.getElementById('productName').required) {
-                formData.productName = document.getElementById('productName').value;
-                formData.productSku = document.getElementById('productSku').value;
-                formData.productUrl = document.getElementById('productUrl').value;
-            }
-
-            try {
-                const token = await getAccessToken();
-                let apiEndpoint = '';
-                let requestBody = {};
-                let headers = {
-                    'Authorization': `Bearer ${token}`,
+        try {
+            // 2. Send the data to our backend server
+            const response = await fetch(BACKEND_URL, {
+                method: 'POST',
+                headers: {
                     'Content-Type': 'application/json',
-                };
+                },
+                body: JSON.stringify(formData),
+            });
 
-                // ---- BUILD REQUEST BASED ON INVITE TYPE ----
+            const responseData = await response.json();
 
-                if (formData.inviteType === 'email') {
-                    // 1. EMAIL INVITE LOGIC
-                    apiEndpoint = `${BASE_INVITE_API_URL}/email-invitations`;
-                    requestBody = {
-                        referenceId: formData.referenceId,
-                        name: formData.customerName,
-                        email: formData.customerEmail,
-                        locale: 'en-US',
-                        senderEmail: SENDER_EMAIL,
-                        senderName: SENDER_NAME,
-                        replyTo: REPLY_TO_EMAIL,
-                    };
-                    
-                    const preferredSendTime = new Date().toISOString();
-
-                    if (formData.reviewType === 'service' || formData.reviewType === 'combined') {
-                        requestBody.serviceReviewInvitation = {
-                            templateId: SERVICE_REVIEW_TEMPLATE_ID,
-                             preferredSendTime: preferredSendTime
-                        };
-                    }
-                    if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
-                        requestBody.productReviewInvitation = {
-                            templateId: PRODUCT_REVIEW_TEMPLATE_ID,
-                             preferredSendTime: preferredSendTime,
-                            products: [{
-                                name: formData.productName,
-                                sku: formData.productSku,
-                                productUrl: formData.productUrl || undefined // Don't include if empty
-                            }]
-                        };
-                    }
-
-                } else {
-                    // 2. LINK INVITE LOGIC
-                    apiEndpoint = `${BASE_INVITE_API_URL}/invitation-links`;
-                    requestBody = {
-                        referenceId: formData.referenceId,
-                        name: formData.customerName,
-                        email: formData.customerEmail,
-                        locale: 'en-US',
-                        // The 'type' parameter is key for generating links
-                        type: formData.reviewType === 'combined' ? 'service-and-product' : formData.reviewType,
-                    };
-
-                    if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
-                        requestBody.products = [{
-                            name: formData.productName,
-                            sku: formData.productSku,
-                            productUrl: formData.productUrl || undefined
-                        }];
-                    }
-                }
-
-                // ---- MAKE THE API CALL ----
-
-                console.log("Sending to:", apiEndpoint);
-                console.log("Request Body:", JSON.stringify(requestBody, null, 2));
-
-                const response = await fetch(apiEndpoint, {
-                    method: 'POST',
-                    headers: headers,
-                    body: JSON.stringify(requestBody),
-                });
-
-                const responseData = await response.json();
-
-                if (!response.ok) {
-                    throw new Error(`API Error: ${response.status} - ${JSON.stringify(responseData)}`);
-                }
-
-                // ---- HANDLE THE RESPONSE ----
-
-                if (formData.inviteType === 'email') {
-                    displayMessage(`✅ Success! Email invitation has been scheduled for ${formData.customerEmail}.`, 'success');
-                } else {
-                    let linkHtml = "✅ Success! Here are your invitation links:<br><br>";
-                    if(responseData.serviceReviewInvitationLink) {
-                        linkHtml += `<strong>Service Link:</strong><div class="code-block"><a href="${responseData.serviceReviewInvitationLink}" target="_blank">${responseData.serviceReviewInvitationLink}</a></div><br>`;
-                    }
-                    if(responseData.productReviewInvitationLinks && responseData.productReviewInvitationLinks.length > 0) {
-                        linkHtml += `<strong>Product Link:</strong><div class="code-block"><a href="${responseData.productReviewInvitationLinks[0].url}" target="_blank">${responseData.productReviewInvitationLinks[0].url}</a></div>`;
-                    }
-                    displayMessage(linkHtml, 'success');
-                }
-
-            } catch (error) {
-                console.error('Form submission error:', error);
-                displayMessage(`❌ Error: ${error.message}`, 'error');
-            } finally {
-                submitButton.disabled = false;
+            if (!response.ok) {
+                // If the server sent an error, display it
+                throw new Error(responseData.message || 'An unknown error occurred.');
             }
-        });
 
-        // --- Initial Setup ---
-        document.addEventListener('DOMContentLoaded', toggleProductDetails);
-        reviewTypeSelect.addEventListener('change', toggleProductDetails);
+            // 3. Display the success response from our backend
+            if (formData.inviteType === 'email') {
+                displayMessage(`✅ Success! Email invitation has been scheduled.`, 'success');
+            } else { // 'link' invite
+                let linkHtml = "✅ Success! Here are your invitation links:<br><br>";
+                if(responseData.serviceReviewInvitationLink) {
+                    linkHtml += `<strong>Service Link:</strong><div class="code-block"><a href="${responseData.serviceReviewInvitationLink}" target="_blank">${responseData.serviceReviewInvitationLink}</a></div><br>`;
+                }
+                if(responseData.productReviewInvitationLinks && responseData.productReviewInvitationLinks.length > 0) {
+                    linkHtml += `<strong>Product Link:</strong><div class="code-block"><a href="${responseData.productReviewInvitationLinks[0].url}" target="_blank">${responseData.productReviewInvitationLinks[0].url}</a></div>`;
+                }
+                displayMessage(linkHtml, 'success');
+            }
 
-    </script>
+        } catch (error) {
+            console.error('Submission error:', error);
+            displayMessage(`❌ Error: ${error.message}`, 'error');
+        } finally {
+            submitButton.disabled = false;
+        }
+    });
+
+    // --- Initial Setup ---
+    document.addEventListener('DOMContentLoaded', toggleProductDetails);
+    reviewTypeSelect.addEventListener('change', toggleProductDetails);
+</script>
+
 </body>
 </html>
