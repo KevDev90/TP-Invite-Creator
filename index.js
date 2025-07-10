@@ -57,28 +57,36 @@ app.post('/api/create-invite', async (req, res) => {
 
     // Route logic based on whether user wants an email or a link
     if (inviteType === 'email') {
-      // --- HANDLE SENDING AN EMAIL INVITATION ---
-      const invitationUrl = `https://api.trustpilot.com/v1/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/invitations`;
+  try { // Add a try block here to catch the specific error
+    const invitationUrl = `https://api.trustpilot.com/v1/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/invitations`;
+    const payload = {
+      customerEmail,
+      customerName,
+      referenceId,
+    };
+    const config = {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+      },
+    };
 
-      const payload = {
-        customerEmail,
-        customerName,
-        referenceId,
-        // Optional: Add products if they exist in the request
-        ...(req.body.productSku && {
-          products: [{
-            productUrl: req.body.productUrl || '',
-            name: req.body.productName,
-            sku: req.body.productSku,
-          }],
-        }),
-      };
+    // --- ADD THIS LOG ---
+    console.log(`DEBUG: Attempting to POST to: ${invitationUrl}`);
 
-      await axios.post(invitationUrl, payload, {
-        headers: { 'Authorization': `Bearer ${accessToken}` }
-      });
+    await axios.post(invitationUrl, payload, config);
+    res.status(200).json({ message: 'Invitation email scheduled successfully.' });
 
-      res.status(200).json({ message: 'Invitation email scheduled successfully.' });
+  } catch (error) {
+    // --- ADD THIS LOG ---
+    console.error('DEBUG: Full Axios error object:', error);
+
+    // This is the original error handling
+    console.error('Error processing invite:', error.response ? error.response.data : error.message);
+    res.status(500).json({ message: 'Failed to send invitation.' });
+  }
+
+
+    
 
     } else if (inviteType === 'link') {
       // --- HANDLE GENERATING INVITATION LINKS ---
