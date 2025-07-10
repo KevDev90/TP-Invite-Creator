@@ -1,129 +1,136 @@
-// Import packages and load environment variables
-require('dotenv').config();
 const express = require('express');
+const axios = require('axios');
+const path = require('path');
+require('dotenv').config();
 const cors = require('cors');
-const fetch = require('node-fetch');
 
-// --- Trustpilot Credentials from .env file ---
-const TRUSTPILOT_API_KEY = process.env.TRUSTPILOT_API_KEY;
-const TRUSTPILOT_API_SECRET = process.env.TRUSTPILOT_API_SECRET;
-const TRUSTPILOT_BUSINESS_UNIT_ID = process.env.TRUSTPILOT_BUSINESS_UNIT_ID;
+const app = express();
+const PORT = 3001;
 
-// --- Helper function to get Access Token ---
-const getAccessToken = async () => {
-  const authUrl = 'https://api.trustpilot.com/v1/oauth/oauth-token';
-  const credentials = Buffer.from(
-    `${TRUSTPILOT_API_KEY}:${TRUSTPILOT_API_SECRET}`
-  ).toString('base64');
+// --- Middleware ---
+app.use(cors()); // Enable Cross-Origin Resource Sharing
+app.use(express.json()); // Parse JSON bodies
+app.use(express.static(path.join(__dirname, 'public'))); // Serve static files from 'public' folder
 
-  const response = await fetch(authUrl, {
-    method: 'POST',
+// --- Trustpilot Credentials from .env ---
+const {
+  TRUSTPILOT_API_KEY,
+  TRUSTPILOT_API_SECRET,
+  TRUSTPILOT_BUSINESS_UNIT_ID,
+  TRUSTPILOT_BUSINESS_USER_ID, // Ensure this is in your .env file
+} = process.env;
+
+/**
+ * Gets a Trustpilot Access Token using the Client Credentials grant type.
+ */
+async function getAccessToken() {
+  const tokenUrl = 'https://api.trustpilot.com/v1/oauth/oauth-business-users-for-applications/accesstoken';
+  const credentials = Buffer.from(`${TRUSTPILOT_API_KEY}:${TRUSTPILOT_API_SECRET}`).toString('base64');
+  const requestBody = 'grant_type=client_credentials';
+  const config = {
     headers: {
       'Authorization': `Basic ${credentials}`,
       'Content-Type': 'application/x-www-form-urlencoded',
     },
-    body: 'grant_type=client_credentials',
-  });
+  };
 
-  if (!response.ok) {
+  try {
+    const response = await axios.post(tokenUrl, requestBody, config);
+    console.log('Successfully retrieved access token!');
+    return response.data.access_token;
+  } catch (error) {
+    console.error('Error: Failed to get Trustpilot access token.');
+    console.error('Error Details:', error.response ? error.response.data : error.message);
     throw new Error('Failed to get Trustpilot access token');
   }
+}
 
-  const data = await response.json();
-  return data.access_token;
-};
-
-// Initialize app
-const app = express();
-const PORT = 3001; // Backend port
-
-// Middleware
-app.use(cors());
-app.use(express.json());
-
-// --- Main API Endpoint ---
+/**
+ * Main API endpoint to handle all invitation logic.
+ */
 app.post('/api/create-invite', async (req, res) => {
-  console.log('Received data from frontend:', req.body);
-  const formData = req.body;
+  console.log('Received request on /api/create-invite with body:', req.body);
 
   try {
     const accessToken = await getAccessToken();
-    const baseInviteApiUrl = `https://invitations-api.trustpilot.com/v1/private/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}`;
+    const { inviteType, reviewType, customerEmail, customerName, referenceId } = req.body;
 
-    let apiEndpoint = '';
-    let requestBody = {};
+    // Route logic based on whether user wants an email or a link
+    if (inviteType === 'email') {
+      // --- HANDLE SENDING AN EMAIL INVITATION ---
+      const invitationUrl = `https://api.trustpilot.com/v1/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/invitations`;
 
-    // --- Build Request Based on Invite Type ---
-    if (formData.inviteType === 'email') {
-      apiEndpoint = `${baseInviteApiUrl}/email-invitations`;
-      // This structure is based on the Trustpilot API docs for email invites
-      requestBody = {
-        referenceId: formData.referenceId,
-        name: formData.customerName,
-        email: formData.customerEmail,
-        locale: 'en-US',
-        senderEmail: "someemail2@trustpilot.com", // Replace or configure as needed
-        senderName: "John Doe", // Replace or configure as needed
-        replyTo: "kej@trustpilot.com", // Replace or configure as needed
-      };
-      if (formData.reviewType === 'service' || formData.reviewType === 'combined') {
-        requestBody.serviceReviewInvitation = { /* Add templateId if needed */ };
-      }
-      if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
-        requestBody.productReviewInvitation = {
+      const payload = {
+        customerEmail,
+        customerName,
+        referenceId,
+        // Optional: Add products if they exist in the request
+        ...(req.body.productSku && {
           products: [{
-            name: formData.productName,
-            sku: formData.productSku,
-            productUrl: formData.productUrl,
-          }]
-        };
-      }
-    } else { // 'link' invite
-      apiEndpoint = `${baseInviteApiUrl}/invitation-links`;
-      // This structure is based on the Trustpilot API docs for generating links
-      requestBody = {
-        referenceId: formData.referenceId,
-        name: formData.customerName,
-        email: formData.customerEmail,
-        locale: 'en-US',
-        type: formData.reviewType === 'combined' ? 'service-and-product' : formData.reviewType,
+            productUrl: req.body.productUrl || '',
+            name: req.body.productName,
+            sku: req.body.productSku,
+          }],
+        }),
       };
-      if (formData.reviewType === 'product' || formData.reviewType === 'combined') {
-        requestBody.products = [{
-          name: formData.productName,
-          sku: formData.productSku,
-          productUrl: formData.productUrl,
-        }];
+
+      await axios.post(invitationUrl, payload, {
+        headers: { 'Authorization': `Bearer ${accessToken}` }
+      });
+
+      res.status(200).json({ message: 'Invitation email scheduled successfully.' });
+
+    } else if (inviteType === 'link') {
+      // --- HANDLE GENERATING INVITATION LINKS ---
+      const responseLinks = {};
+
+      // Generate Service Review Link if needed
+      if (reviewType === 'service' || reviewType === 'combined') {
+        const serviceLinkUrl = `https://api.trustpilot.com/v1/business-units/${TRUSTPILOT_BUSINESS_UNIT_ID}/invitation-links`;
+        const servicePayload = { email: customerEmail, name: customerName, referenceId };
+        const serviceResponse = await axios.post(serviceLinkUrl, servicePayload, {
+          headers: { 'Authorization': `Bearer ${accessToken}` }
+        });
+        responseLinks.serviceReviewInvitationLink = serviceResponse.data.url;
       }
+
+      // Generate Product Review Link if needed
+      if (reviewType === 'product' || reviewType === 'combined') {
+        const productLinkUrl = 'https://api.trustpilot.com/v1/product-reviews/invitation-links';
+        const productPayload = {
+          email: customerEmail,
+          name: customerName,
+          referenceId,
+          products: [{
+            productUrl: req.body.productUrl,
+            name: req.body.productName,
+            sku: req.body.productSku,
+          }],
+        };
+        const productResponse = await axios.post(productLinkUrl, productPayload, {
+          headers: {
+            'Authorization': `Bearer ${accessToken}`,
+            'x-business-user-id': TRUSTPILOT_BUSINESS_USER_ID,
+          }
+        });
+        // Format response to match what the frontend expects
+        responseLinks.productReviewInvitationLinks = [{ url: productResponse.data.url }];
+      }
+
+      res.status(200).json(responseLinks);
+
+    } else {
+      res.status(400).json({ message: 'Invalid inviteType specified.' });
     }
-
-    // --- Make the API call to Trustpilot ---
-    const trustpilotResponse = await fetch(apiEndpoint, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify(requestBody),
-    });
-    
-    const responseData = await trustpilotResponse.json();
-
-    if (!trustpilotResponse.ok) {
-        // Forward the error from Trustpilot to our frontend
-        throw new Error(JSON.stringify(responseData));
-    }
-
-    // --- Send Success Response to Frontend ---
-    res.status(200).json(responseData);
-
   } catch (error) {
-    console.error('Error processing invite:', error);
-    res.status(500).json({ message: 'Failed to process invite', error: error.message });
+    console.error('Error processing invite:', error.response ? error.response.data : error.message);
+    const errorMessage = error.response?.data?.message || 'An unexpected error occurred.';
+    res.status(500).json({ message: errorMessage });
   }
 });
 
-// Start Server
 app.listen(PORT, () => {
   console.log(`✅ Server is running on http://localhost:${PORT}`);
+  console.log('Frontend should be accessible at http://localhost:3001/index.html');
+  console.log('API endpoint is listening at http://localhost:3001/api/create-invite');
 });
